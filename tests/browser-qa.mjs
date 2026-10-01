@@ -20,29 +20,42 @@ export async function runBrowserQA(tab) {
   check(initialLayout.inputBottom<900&&initialLayout.resultBottom<900&&initialLayout.processBottom<900,'Inputs, CG settings, results and process header are visible');
   check((await text('cg-height-result')).includes('1377'),'Reference CG = 1377 mm');
   check((await text('critical-angle')).includes('21.6'),'Reference critical angle = 21.6°');
-  check((await text('margin')).includes('-0.4'),'Reference margin = -0.4°');
-  check((await text('recommended-width')).includes('1120')&&(await text('precise-width')).includes('1112.7'),'Precise and rounded widths are distinct');
-  check((await text('design-status')).includes('未達')&&(await text('current-status'))==='仍穩定','Design requirement and current stability are independent');
-  for(const [name,number] of [['棧板高度',180],['棧板寬度',1200],['機櫃高度',2600],['目前傾斜角',18.5]]){
+  check((await text('spec-gap')).includes('0.4'),'Reference specification gap = 0.4°');
+  check((await text('recommended-width')).includes('1120'),'Summary retains engineering rounded width');
+  check((await text('design-status')).includes('符合')&&(await text('current-status'))==='未達臨界角','Reference design passes the 22° upper limit and current state is stable');
+  const summary=await tab.playwright.evaluate(()=>{
+    const relationship=document.querySelector('[data-testid="angle-relationship"]'),width=document.querySelector('[data-testid="angle-width"]'),cards=[...document.querySelectorAll('.judgment-card')];
+    return {angles:[...relationship.querySelectorAll('.angle-summary strong')].map(e=>e.textContent),scaleCount:relationship.querySelectorAll('[data-testid="angle-scale"],.angle-scale-container').length,width:width.textContent.replace(/\s/g,''),widthDetails:width.querySelectorAll('p').length,cardBoxes:cards.map(e=>{const r=e.getBoundingClientRect();return {top:r.top,width:r.width};})};
+  });
+  check(summary.angles.join('|')==='16.0°|21.6°|22.0°'&&summary.scaleCount===0,'Three-angle summary is retained and the removed scale is absent');
+  check(summary.width==='所需棧板寬度1120mm'&&summary.widthDetails===0,'Width summary contains only title and recommended value');
+  check(summary.cardBoxes.length===2&&summary.cardBoxes[0].top===summary.cardBoxes[1].top&&Math.abs(summary.cardBoxes[0].width-summary.cardBoxes[1].width)<1,'Two equally weighted judgment cards sit side by side');
+  for(const [name,number] of [['棧板高度',180],['棧板寬度',1200],['機櫃高度',2600],['目前傾角',18.5]]){
     await tab.playwright.getByRole('spinbutton',{name:name+'數值',exact:true}).fill(String(number));
     check(Math.abs(await range(name+'滑桿')-number)<1e-6,name+' numeric input synchronizes range');
     await tab.playwright.getByRole('slider',{name:name+'滑桿',exact:true}).press('ArrowRight');
     check(Math.abs(await value(name+'數值')-await range(name+'滑桿'))<1e-6,name+' range synchronizes numeric input');
+    const cg=await value('機櫃高度數值')/2+await value('棧板高度數值');
+    const expectedAngle=Math.atan((await value('棧板寬度數值')/2)/cg)*180/Math.PI;
+    check((await text('critical-angle'))===expectedAngle.toFixed(1)+'°',name+' adjustment updates the retained critical angle summary');
   }
   await reset();
   const initial=await geometry();
-  await tab.playwright.getByRole('button',{name:'至 22°',exact:true}).click();
+  await tab.playwright.getByRole('button',{name:'至規格上限',exact:true}).click();
   const tilted=await geometry();
-  check((await text('current-status'))==='超過臨界角','22° shortcut exceeds reference critical angle');
+  check((await text('current-status'))==='已超過臨界角','22° shortcut exceeds reference critical angle');
   check(tilted.assembly!==initial.assembly&&tilted.arc!==initial.arc,'Tilt rotates assembly and updates angle arc');
   check(Math.abs(tilted.pivot.x-initial.pivot.x)<1e-6&&Math.abs(tilted.pivot.y-initial.pivot.y)<1e-6,'Right pivot stays at fixed screen coordinates during tilt');
   check(tilted.gravity.x1===tilted.gravity.x2,'Gravity remains vertical in world coordinates');
-  await tab.playwright.getByRole('button',{name:'臨界角',exact:true}).click();
+  await tab.playwright.getByRole('button',{name:'至臨界角',exact:true}).click();
   const critical=await geometry();
-  check((await text('current-status'))==='臨界狀態'&&Math.abs(critical.gravity.x1-critical.pivot.x)<1e-5,'Critical shortcut aligns gravity with pivot exactly');
-  check(Math.abs(await value('目前傾斜角數值')-await range('目前傾斜角滑桿'))<1e-6,'Critical angle keeps precise numeric and slider synchronization');
+  check((await text('current-status'))==='已達臨界角'&&Math.abs(critical.gravity.x1-critical.pivot.x)<1e-5,'Critical shortcut aligns gravity with pivot exactly');
+  check(await value('目前傾角數值')===Number((await range('目前傾角滑桿')).toFixed(1)),'Critical angle displays one decimal while the slider retains engineering precision');
+  await tab.playwright.getByRole('spinbutton',{name:'目前傾角數值',exact:true}).click();
+  await tab.playwright.getByRole('spinbutton',{name:'棧板高度數值',exact:true}).click();
+  check((await text('current-status'))==='已達臨界角'&&Math.abs((await geometry()).gravity.x1-critical.pivot.x)<1e-5,'Focusing and leaving the rounded angle field does not alter the exact critical state');
   await tab.playwright.getByRole('button',{name:'直立 0°',exact:true}).click();
-  check(await value('目前傾斜角數值')===0,'Upright shortcut returns tilt to zero');
+  check(await value('目前傾角數值')===0,'Upright shortcut returns tilt to zero');
   await reset();
   const start=await geometry();
   await tab.cua.drag({path:[start.cg,{x:start.cg.x+8,y:start.cg.y-8},{x:start.cg.x+17,y:start.cg.y-17},{x:start.cg.x+28,y:start.cg.y-28}]});
@@ -50,7 +63,8 @@ export async function runBrowserQA(tab) {
   const manualZ=await value('重心高度（離地）數值'),manualX=await value('重心左右偏移數值');
   check(manualZ>1377&&manualX>0,'CG drag changes height and horizontal offset');
   check(manualZ===await range('重心高度（離地）滑桿')&&manualX===await range('重心左右偏移滑桿'),'CG drag synchronizes both sliders and numeric fields');
-  check((await text('critical-angle'))!=='21.6°'&&(await text('margin'))!=='-0.4°','CG drag recalculates angle and margin');
+  check((await text('critical-angle'))===(Math.atan((546-manualX)/manualZ)*180/Math.PI).toFixed(1)+'°','CG dragging updates the retained critical angle summary correctly');
+  check((await text('critical-angle'))!=='21.6°'&&(await text('spec-gap'))!=='距規格上限尚有 0.4°','CG drag recalculates angle and margin');
   const beforeControls=await geometry();
   await tab.playwright.getByRole('spinbutton',{name:'重心左右偏移數值',exact:true}).fill('-100');
   await tab.playwright.getByRole('spinbutton',{name:'重心高度（離地）數值',exact:true}).fill('1377');
@@ -65,6 +79,7 @@ export async function runBrowserQA(tab) {
   await tab.playwright.getByRole('button',{name:/計算過程/}).click();
   check(await tab.playwright.locator('.calculation-card').count()===6,'Calculation process has six horizontal cards');
   const formulaText=await tab.playwright.locator('.calculation-steps').innerText();
+  check(formulaText.includes('1112.7')&&formulaText.includes('1120'),'Expanded process distinguishes precise and rounded widths');
   check(formulaText.includes('2448 / 2 + 153')&&formulaText.includes('556.3')&&formulaText.includes('1112.7')&&formulaText.includes('tan⁻¹(546 / 1377)'),'Handwritten-style numerical steps retain precise values');
   await tab.playwright.getByRole('button',{name:/計算過程/}).click();
   await tab.reload();

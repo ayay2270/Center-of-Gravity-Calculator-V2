@@ -1,0 +1,13 @@
+Version A 完整計算機：免伺服器版本
+
+開啟方式：
+1. 如使用 Version-A-免伺服器.zip，先解壓縮。
+2. 在 Windows 檔案總管找到「Version-A-直接開啟.html」。
+3. 右鍵 > 開啟檔案 > Microsoft Edge 或 Google Chrome。
+
+這是完整 React 應用程式的單檔封裝，並非截圖。
+輸入、滑桿、手動重心、CG 拖曳、傾角、臨界角、結果與六步驗算均使用同一份正式建置程式。
+它不連接 127.0.0.1，不需要 Node.js 或本機伺服器，也不需要網際網路。
+Codex 內建瀏覽器限制 file:// 協定，請使用桌面 Chrome 或 Edge。
+
+如要修改 React / TypeScript 原始碼，仍可使用原專案與 npm run dev。

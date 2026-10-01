@@ -1,0 +1,18 @@
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import vm from 'node:vm';
+import {fileURLToPath} from 'node:url';
+const root=path.dirname(fileURLToPath(import.meta.url));
+const dist=path.join(root,'dist');
+let html=await fs.readFile(path.join(dist,'index.html'),'utf8');
+const script=html.match(/<script\b[^>]*src="([^"]+)"[^>]*><\/script>/);
+const style=html.match(/<link\b[^>]*href="([^"]+\.css)"[^>]*>/);
+if(!script||!style)throw new Error('Build assets were not found. Run npm run build first.');
+const js=await fs.readFile(path.resolve(dist,script[1]),'utf8');
+const css=await fs.readFile(path.resolve(dist,style[1]),'utf8');
+new vm.Script(js);
+html=html.replace(script[0],()=>`<script type="module">${js.replace(/<\/script/gi,'<\\/script')}</script>`);
+html=html.replace(style[0],()=>`<style>${css}</style>`);
+if(/<script\b[^>]*src=|<link\b[^>]*href="[^\"]+\.css"/.test(html))throw new Error('External assets remain.');
+await fs.writeFile(path.join(root,'Version-A-直接開啟.html'),html);
+console.log('Self-contained Version A HTML written; JavaScript syntax and inline assets verified.');

@@ -1,0 +1,16 @@
+/* An expanded walkthrough may extend the page; the primary panels stay readable. */
+@media (min-width:1281px) {
+  .application { grid-template-rows:74px minmax(570px,1fr) auto 25px; }
+  .application[data-process-expanded="true"] {
+    height:auto;
+    grid-template-rows:74px 570px auto 25px;
+  }
+  .input-body { padding-top:12px; padding-bottom:12px; }
+  .control { padding-bottom:10px; }
+  .range { margin-top:12px; }
+  .tilt-controls { padding-top:8px; padding-bottom:10px; }
+  .cg-summary { padding-top:10px; padding-bottom:6px; }
+  .cg-settings-toggle { padding-bottom:8px; }
+  .mode-switch { margin-bottom:7px; }
+  .offset-help { padding-bottom:4px; }
+}

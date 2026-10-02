@@ -1,0 +1,285 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#143650">
+<title>2D 重心 / 翻覆穩定性計算機 — Concept E · Guided workflow</title>
+<link rel="stylesheet" href="../shared/cog-base.css">
+<!--
+  CONCEPT E — Guided workflow (still one calculator, not a wizard)
+  The order of reasoning — geometry → tilt & spec → CG → result — becomes the order of the page.
+   1. inputs are numbered steps 1 / 2 / 3 on a thin spine; every step stays open, and when one is collapsed it keeps a
+      one-line summary of its values
+   2. results read as a chain: 臨界角 θc, then compared with the current tilt, then with the spec limit, then the required width
+   3. hovering or focusing a step highlights what it controls in the drawing (dimensions / tilt arc / CG) and softens the rest
+   4. the drawing header carries a 1-2-3-4 index; each calculation card says which step its inputs come from
+-->
+<style>
+  .app { display: grid; grid-template-rows: 74px minmax(570px, 1fr) auto 25px; gap: 10px; height: 100dvh; min-height: 100vh; }
+  .app[data-process-expanded=true] { grid-template-rows: 74px minmax(max(570px, 100dvh - 172px), max-content) auto 25px; height: auto; }
+  .workspace { display: grid; grid-template-columns: 296px minmax(0, 1fr) 304px; gap: 12px; margin: 0 10px; min-height: 0; }
+  @media (min-width: 1700px) { .workspace { grid-template-columns: 330px minmax(0, 1fr) 340px; } }
+  @media (max-width: 1280px) { .workspace { grid-template-columns: 268px minmax(0, 1fr) 280px; gap: 9px; } .app { grid-template-rows: 74px minmax(620px, 1fr) auto 25px; height: auto; } .calculation-steps { grid-template-columns: repeat(3, minmax(0, 1fr)); } .geometry-details { align-items: start; } .geometry-details dl { grid-template-columns: repeat(2, 1fr); gap: 8px 15px; } }
+
+  /* --- workflow spine ------------------------------------------------------------------------------ */
+  .input-body { padding: 14px 14px 18px 12px; }
+  .flow { list-style: none; margin: 0; padding: 0; }
+  .flow > li { position: relative; padding: 0 0 14px 42px; }
+  .flow > li::before { content: ""; position: absolute; left: 15px; top: 34px; bottom: 2px; width: 2px; background: #c7dce9; border-radius: 1px; }
+  .flow > li:last-child { padding-bottom: 2px; } .flow > li:last-child::before { display: none; }
+  .badge { position: absolute; left: 0; top: 0; width: 32px; height: 32px; display: grid; place-items: center; border-radius: 50%; background: var(--navy); color: #fff; font-size: 16px; font-weight: 650; box-shadow: 0 0 0 3px #fff, 0 0 0 4px #acc6d9; transition: background .15s, box-shadow .15s; }
+  .flow > li.is-active .badge, .flow > li:focus-within .badge { background: var(--blue); box-shadow: 0 0 0 3px #fff, 0 0 0 5px #8fc0dc; }
+  .step-head { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; column-gap: 8px; width: 100%; min-height: 32px; padding: 0; border: 0; border-radius: 4px; background: transparent !important; text-align: left; color: inherit; }
+  .step-head:hover h3 { color: #0f5d91; }
+  .step-head h3 { font-size: 16px; font-weight: 650; line-height: 1.3; }
+  .step-head .step-sum { grid-column: 1; grid-row: 2; display: none; color: var(--muted); font-size: 12px; white-space: nowrap; font-variant-numeric: tabular-nums; margin-top: -4px; }
+  .step-head .ico { grid-column: 2; grid-row: 1; color: #6f90a8; transition: transform .15s; }
+  .collapsed > .step-head .step-sum { display: block; }
+  .collapsed > .step-head .ico { transform: rotate(-90deg); }
+  .collapsed > .step-body { display: none; }
+  .step-body { padding-top: 4px; }
+  .step-body .control-row .icon { display: none; }
+  .control { padding-bottom: 10px; }
+  .range { margin: 10px 0 3px; }
+  .range-wrap { position: relative; }
+  .tick { position: absolute; width: 2px; height: 9px; margin-left: -1px; border-radius: 1px; pointer-events: none; }
+  .tick-crit { top: -7px; background: var(--c-crit); } .tick-spec { top: 4px; background: var(--c-spec); }
+  .tilt-card .number-box { width: 100px; } .tilt-card .number-box input { font-size: 20px; }
+  .quick-actions { gap: 0; margin: 9px 0 0; }
+  .quick-actions button { border-radius: 0; margin-left: -1px; min-height: 33px; font-size: 11.5px; white-space: nowrap; display: inline-flex; align-items: center; justify-content: center; gap: 4px; padding: 6px 1px; }
+  .quick-actions button:first-child { border-radius: 4px 0 0 4px; margin-left: 0; } .quick-actions button:last-child { border-radius: 0 4px 4px 0; }
+  .quick-actions i { width: 6px; height: 6px; border-radius: 50%; flex: none; }
+  .spec-card { margin-top: 10px; }
+  .cg-card { margin-top: 2px; }
+  .cg-card .control-row { flex-wrap: nowrap; } .cg-card .control-row label { font-size: 12.5px; } .cg-card .number-box { width: 76px; min-width: 76px; }
+  .cg-card .mode-switch { margin-top: 6px; }
+
+  /* --- drawing: step focus ------------------------------------------------------------------------- */
+  .step-index { margin-left: auto; display: flex; align-items: center; gap: 6px; }
+  .step-index button { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px 3px 4px; border-radius: 999px; font-size: 13px; color: #174a6b; background: #fff; }
+  .step-index button b { display: inline-grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; background: var(--navy); color: #fff; font-size: 12px; font-weight: 650; }
+  .step-index button.on { background: #e2eef7; border-color: #8fc0dc; font-weight: 600; }
+  .light-heading > .step-index + span { display: none; }
+  .drawing[data-focus] .engineering-svg .g-body, .drawing[data-focus] .engineering-svg .g-dim, .drawing[data-focus] .engineering-svg .g-angle, .drawing[data-focus] .engineering-svg .g-cg { opacity: .28; transition: opacity .18s; }
+  .drawing[data-focus=geometry] .engineering-svg .g-body, .drawing[data-focus=geometry] .engineering-svg .g-dim { opacity: 1; }
+  .drawing[data-focus=angle] .engineering-svg .g-body, .drawing[data-focus=angle] .engineering-svg .g-angle { opacity: 1; }
+  .drawing[data-focus=cg] .engineering-svg .g-body, .drawing[data-focus=cg] .engineering-svg .g-cg { opacity: 1; }
+  .drawing[data-focus=result] .engineering-svg .g-body, .drawing[data-focus=result] .engineering-svg .g-angle, .drawing[data-focus=result] .engineering-svg .g-cg { opacity: 1; }
+  .drawing .engineering-svg .g-body, .drawing .engineering-svg .g-dim, .drawing .engineering-svg .g-angle, .drawing .engineering-svg .g-cg { transition: opacity .18s; }
+  .drawing-footer strong { color: var(--c-theta); }
+  .dim-toggle { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; padding: 4px 8px; margin: -4px -8px; border: 0; background: transparent; text-align: right; border-radius: 4px; color: inherit; }
+  .dim-toggle span { color: #174a6b; font-size: 13px; font-weight: 550; } .dim-toggle small { color: var(--muted-2); } .dim-toggle:hover { background: #e8f1f8; }
+
+  /* --- results as a chain -------------------------------------------------------------------------- */
+  .panel-heading .badge4 { display: inline-grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; background: #fff; color: var(--navy); font-size: 13px; font-weight: 700; flex: none; }
+  .results-body { padding: 12px 12px 16px; }
+  .chain { list-style: none; margin: 0; padding: 0; }
+  .chain > li { position: relative; padding-bottom: 20px; }
+  .chain > li:last-child { padding-bottom: 0; }
+  .chain > li:not(:last-child)::after { content: ""; position: absolute; left: 14px; bottom: 3px; width: 2px; height: 14px; background: #c7dce9; }
+  .chain > li:not(:last-child)::before { content: ""; position: absolute; left: 10px; bottom: 0; border: 5px solid transparent; border-top: 6px solid #c7dce9; border-bottom: 0; }
+  .link-label { display: flex; align-items: baseline; gap: 7px; margin-bottom: 6px; font-size: 13px; color: var(--ink-2); font-weight: 550; }
+  .link-label b { display: inline-grid; place-items: center; min-width: 26px; height: 18px; padding: 0 5px; border-radius: 9px; background: #e2eef7; color: #164e76; font-size: 11.5px; font-weight: 650; }
+  .link-label em { margin-left: auto; font-style: normal; color: var(--muted-2); font-size: 11.5px; font-weight: 400; }
+  .fig { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; padding: 10px 12px 9px; background: #fff; border: 1px solid #d2e3ef; border-radius: 4px; }
+  .fig strong { font-size: 34px; font-weight: 650; letter-spacing: -.04em; line-height: 1.1; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .fig strong small { font-size: 18px; }
+  .fig > span { color: var(--muted); font-size: 12px; line-height: 1.5; text-align: right; }
+  .fig.angle-current strong { color: var(--c-theta); } .fig.angle-critical strong { color: var(--c-crit); } .fig.angle-spec strong { color: var(--c-spec); }
+  .fig.angle-critical, .fig.angle-current, .fig.angle-spec { color: inherit; }
+  .fig + .judgment-card { margin-top: 6px; }
+  .judgment-title { gap: 6px; }
+  .judgment-title .margin-num { margin-left: auto; font-size: 20px; font-weight: 650; font-variant-numeric: tabular-nums; }
+  .judgment-title .margin-num small { font-size: 12px; font-weight: 400; }
+  .angle-width { margin-top: 0; }
+  .angle-width > div > span { display: block; font-size: 15px; font-weight: 550; line-height: 1.4; }
+  .angle-width > div > em { display: block; margin-top: 2px; font-style: normal; color: var(--muted); font-size: 12px; font-weight: 400; }
+  .engineering-message { margin-top: 14px; padding: 8px 0 0 10px; border-left: 2px solid #c5d8e6; }
+
+  .calculation-card .src { margin-left: 4px; padding: 0 6px; border-radius: 9px; background: #e2eef7; color: #164e76; font-size: 11px; font-weight: 600; line-height: 17px; }
+</style>
+</head>
+<body>
+<div class="app" id="app" data-process-expanded="false">
+  <header class="top-header">
+    <span data-icon="cabinet" data-cls="brand-icon"></span>
+    <div class="title-group"><h1>2D 重心 / 翻覆穩定性計算機</h1><p>清楚並列輸入、圖面與判讀 · 右側靜態翻覆</p></div>
+    <div class="header-actions"><button type="button" data-action="reset">範例重設</button><button type="button" class="help-button" data-action="help" aria-label="計算模型說明">?</button></div>
+  </header>
+
+  <main class="workspace">
+    <aside class="panel col-panel" aria-label="輸入參數">
+      <div class="panel-heading"><span data-icon="palletHeight"></span><h2>輸入參數</h2><span>mm / °</span></div>
+      <div class="input-body scroll-body" id="inputBody">
+        <ol class="flow">
+          <li class="step" id="step-1" data-focus="geometry">
+            <span class="badge" aria-hidden="true">1</span>
+            <button type="button" class="step-head" aria-expanded="true" aria-controls="body-1"><h3>棧板與機櫃尺寸</h3><span class="step-sum" id="sum-1"></span><span data-glyph="chevron" data-size="16"></span></button>
+            <div class="step-body" id="body-1">
+              <div data-ctl="palletHeight" data-prefix="e"></div>
+              <div data-ctl="palletWidth" data-prefix="e"></div>
+              <div data-ctl="cabinetHeight" data-prefix="e"></div>
+            </div>
+          </li>
+          <li class="step" id="step-2" data-focus="angle">
+            <span class="badge" aria-hidden="true">2</span>
+            <button type="button" class="step-head" aria-expanded="true" aria-controls="body-2"><h3>角度設定</h3><span class="step-sum" id="sum-2"></span><span data-glyph="chevron" data-size="16"></span></button>
+            <div class="step-body" id="body-2">
+              <div class="tilt-card"><div data-ctl="tilt" data-prefix="e" data-opts="marks"></div></div>
+              <div class="quick-actions">
+                <button type="button" data-action="upright">直立 0°</button>
+                <button type="button" data-action="critical"><i style="background:var(--c-crit)"></i>至臨界角</button>
+                <button type="button" data-action="spec"><i style="background:var(--c-spec)"></i>至規格上限</button>
+              </div>
+              <div class="spec-card"><div data-ctl="specLimitAngle" data-prefix="e" data-opts="label:規格上限角度"></div><p>規格判讀上限，不改變目前姿態</p></div>
+            </div>
+          </li>
+          <li class="step" id="step-3" data-focus="cg">
+            <span class="badge" aria-hidden="true">3</span>
+            <button type="button" class="step-head" aria-expanded="true" aria-controls="body-3"><h3>重心 CG</h3><span class="step-sum" id="sum-3"></span><span data-glyph="chevron" data-size="16"></span></button>
+            <div class="step-body" id="body-3">
+              <section class="cg-card" aria-label="重心 CG 設定">
+                <div class="cg-heading"><h3><span data-cgsym="20"></span>重心 CG</h3><span class="mode-pill" data-v="modeLabel"></span></div>
+                <div class="cg-summary"><div><span>重心高度 <i>Zcg</i></span><strong><span data-v="z"></span> <small>mm</small></strong></div><p data-v="cgNote"></p></div>
+                <div class="mode-switch" role="group" aria-label="重心模式"><button type="button" data-mode-set="theoretical" aria-pressed="true">理論置中</button><button type="button" data-mode-set="manual" aria-pressed="false">手動調整</button></div>
+                <div data-ctl="cgHeight" data-prefix="e" data-opts="label:重心高度（離地）"></div>
+                <div data-ctl="cgOffset" data-prefix="e"></div>
+                <p class="offset-help">偏移 ＋ 向右 / − 向左 · 高度從地面起算</p>
+              </section>
+            </div>
+          </li>
+        </ol>
+      </div>
+    </aside>
+
+    <section class="panel visual-panel" aria-label="2D 側視圖">
+      <div class="panel-heading light-heading"><span data-icon="cabinet"></span><h2>2D 側視圖</h2>
+        <nav class="step-index" aria-label="步驟索引">
+          <button type="button" data-go="1"><b>1</b>尺寸</button><button type="button" data-go="2"><b>2</b>角度</button><button type="button" data-go="3"><b>3</b>重心</button><button type="button" data-go="4"><b>4</b>判定</button>
+        </nav>
+        <span>機櫃於棧板上</span>
+      </div>
+      <div class="drawing" id="drawing"></div>
+      <div class="drawing-footer">
+        <div><strong>θ <span data-v="tilt"></span>°</strong><span>目前傾角</span></div>
+        <div class="drag-help" style="align-items:center;text-align:center"><span><i class="red-dot"></i> 拖曳重心即時調整</span><small>方向鍵微調 · Shift ×10</small></div>
+        <button type="button" class="dim-toggle" id="dimToggle" aria-pressed="false"><span>尺寸明細</span><small id="dimHint">指向步驟 1 或展開計算過程</small></button>
+      </div>
+    </section>
+
+    <aside class="panel col-panel" aria-label="角度關係與判定" id="results">
+      <div class="panel-heading"><span class="badge4" aria-hidden="true">4</span><h2>角度關係與判定</h2><span>即時</span></div>
+      <div class="results-body scroll-body" id="resultsBody">
+        <ol class="chain">
+          <li data-focus="result">
+            <div class="link-label"><b>4.1</b>臨界角 θc<em>取自步驟 1 · 3</em></div>
+            <div class="fig angle-critical"><strong><span data-v="critical"></span><small>°</small></strong></div>
+          </li>
+          <li data-focus="result">
+            <div class="link-label"><b>4.2</b>目前傾角 θ 對照臨界角<em>步驟 2</em></div>
+            <div class="fig angle-current"><strong><span data-v="tilt"></span><small>°</small></strong><span>目前傾角 θ</span></div>
+            <section class="judgment-card" data-state-from="crit" aria-label="目前傾角與臨界角判定">
+              <div class="judgment-title"><span data-status-mark="20"></span><strong data-v="crit.title"></strong><b class="margin-num"><span data-v="critMargin"></span><small>°</small></b></div>
+              <p data-v="crit.gap"></p><p class="judgment-comparison" data-v="crit.cmp"></p>
+            </section>
+          </li>
+          <li data-focus="result">
+            <div class="link-label"><b>4.3</b>目前傾角 θ 對照規格上限<em>步驟 2</em></div>
+            <div class="fig angle-spec"><strong><span data-v="specAngle"></span><small>°</small></strong><span>規格上限</span></div>
+            <section class="judgment-card" data-state-from="spec" aria-label="目前傾角與規格上限判定">
+              <div class="judgment-title"><span data-status-mark="20"></span><strong data-v="spec.title"></strong><b class="margin-num"><span data-v="specMargin"></span><small>°</small></b></div>
+              <p data-v="spec.gap"></p><p class="judgment-comparison" data-v="spec.cmp"></p>
+            </section>
+          </li>
+          <li data-focus="result">
+            <div class="link-label"><b>4.4</b>反算<em>以規格上限</em></div>
+            <section class="angle-width"><div><span>所需棧板寬度</span><em>半寬向上取 10 mm</em></div><strong><span data-v="width"></span> <small>mm</small></strong></section>
+          </li>
+        </ol>
+        <p class="engineering-message" data-v="message"></p>
+      </div>
+    </aside>
+  </main>
+
+  <section class="panel process-panel collapsed" id="process" aria-label="計算過程" style="margin:0 10px">
+    <button type="button" class="process-heading" id="processToggle" aria-expanded="false" aria-controls="calcBody">
+      <span data-icon="process"></span><h2>計算過程</h2><span data-v="processLead"></span>
+      <b class="process-summary" data-v="processSummary" style="font-weight:400"></b>
+      <span class="toggle-caption"><span id="processCaption">展開</span><span data-glyph="chevron" data-size="18"></span></span>
+    </button>
+    <div id="calcBody" hidden>
+      <div class="geometry-details"><h3>工程尺寸明細</h3><dl id="dims"></dl></div>
+      <div class="calculation-steps" id="steps"></div>
+    </div>
+  </section>
+  <footer class="page-footer"><span data-v="footA"></span><span data-v="footB"></span></footer>
+</div>
+<div id="helpHost"></div>
+
+<script src="../shared/cog-core.js"></script>
+<script src="../shared/cog-ui.js"></script>
+<script>
+  document.getElementById('helpHost').innerHTML = UI.helpDialog;
+  UI.hydrate();
+  const $ = (id) => document.getElementById(id);
+  const st = { expanded: false, focus: null };
+  const SRC = { 1: '步驟 1 · 3', 2: '步驟 2', 3: '步驟 2 · 3', 4: '步驟 4', 5: '步驟 1 · 3', 6: '步驟 2' };
+
+  const app = CoG.mount({
+    onUpdate({ P, R, V }) {
+      $('steps').innerHTML = UI.stepCards(V).replace(/<h3><b>(\d)<\/b>([^<]*)(<small>[^<]*<\/small>)?<\/h3>/g, (m, n, t, sm) => `<h3><b>${n}</b>${t}${sm || ''}</h3>`);
+      document.querySelectorAll('#steps .calculation-card').forEach((c, i) => { c.querySelector('h3').insertAdjacentHTML('beforeend', `<span class="src">${SRC[i + 1]}</span>`); });
+      $('dims').innerHTML = UI.dimsHTML(V);
+      $('sum-1').textContent = `${V.palletHeight} · ${V.palletWidth} · ${V.cabinetHeight} mm`;
+      $('sum-2').textContent = `θ ${V.tilt}° · 規格 ${V.specAngle}°`;
+      $('sum-3').textContent = `${V.modeLabel} · Zcg ${V.z} mm`;
+      document.querySelectorAll('.tick-crit').forEach((t) => { t.style.left = `calc(7px + (100% - 14px) * ${Math.min(1, R.criticalAngle / 75)})`; });
+      document.querySelectorAll('.tick-spec').forEach((t) => { t.style.left = `calc(7px + (100% - 14px) * ${Math.min(1, P.specLimitAngle / 75)})`; });
+    },
+  });
+  const showDims = () => st.expanded || st.focus === 'geometry';
+  const drawing = app.drawing($('drawing'), { svgClass: 'engineering-svg', margins: { t: 59, r: 135, b: 96, l: 105 }, pivotFrac: 0.55, draw: (L, c) => UI.drawProd(L, c, { showDims: showDims(), groups: true }) });
+  $('drawing').insertAdjacentHTML('beforeend', UI.legendHTML);
+
+  /* step focus -> highlights in the drawing */
+  function setFocus(f) {
+    if (st.focus === f) return;
+    st.focus = f;
+    if (f) $('drawing').dataset.focus = f; else delete $('drawing').dataset.focus;
+    document.querySelectorAll('.flow > li').forEach((li) => li.classList.toggle('is-active', li.dataset.focus === f));
+    document.querySelectorAll('.step-index button').forEach((b) => b.classList.toggle('on', ['geometry', 'angle', 'cg', 'result'][Number(b.dataset.go) - 1] === f));
+    drawing.draw();
+  }
+  document.querySelectorAll('[data-focus]').forEach((el) => {
+    el.addEventListener('mouseenter', () => setFocus(el.dataset.focus));
+    el.addEventListener('mouseleave', () => { if (!el.contains(document.activeElement)) setFocus(null); });
+    el.addEventListener('focusin', () => setFocus(el.dataset.focus));
+    el.addEventListener('focusout', (e) => { if (!el.contains(e.relatedTarget) && !el.matches(':hover')) setFocus(null); });
+  });
+  // step collapse / expand (all open by default)
+  document.querySelectorAll('.step-head').forEach((b) => b.addEventListener('click', () => {
+    const li = b.closest('li'), open = li.classList.contains('collapsed');
+    li.classList.toggle('collapsed', !open); b.setAttribute('aria-expanded', String(open));
+  }));
+  // index: jump to a step and pulse its highlight
+  document.querySelectorAll('.step-index button').forEach((b) => b.addEventListener('click', () => {
+    const n = Number(b.dataset.go), target = n === 4 ? $('results') : $('step-' + n);
+    target.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    const f = ['geometry', 'angle', 'cg', 'result'][n - 1]; setFocus(f); setTimeout(() => { if (!document.querySelector('[data-focus]:hover')) setFocus(null); }, 1600);
+  }));
+
+  function setExpanded(v) {
+    st.expanded = v; $('app').dataset.processExpanded = String(v); $('process').classList.toggle('collapsed', !v);
+    $('processToggle').setAttribute('aria-expanded', String(v)); $('calcBody').hidden = !v; $('processCaption').textContent = v ? '收合' : '展開';
+    $('dimToggle').setAttribute('aria-pressed', String(v)); $('dimHint').textContent = v ? '尺寸標註已顯示' : '指向步驟 1 或展開計算過程'; drawing.draw();
+  }
+  $('processToggle').addEventListener('click', () => setExpanded(!st.expanded));
+  $('dimToggle').addEventListener('click', () => setExpanded(!st.expanded));
+  { const q = new URLSearchParams(location.search);
+    if (q.get('process') === '1') setExpanded(true);
+    const f = q.get('focus'); if (f) setFocus(f);
+    (q.get('collapse') || '').split(',').filter(Boolean).forEach((n) => $('step-' + n).querySelector('.step-head').click()); }
+</script>
+</body>
+</html>

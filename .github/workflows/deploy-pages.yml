@@ -1,5 +1,10 @@
 name: Deploy GitHub Pages
 
+# One Pages artifact, two versions:
+#   /           production, always built from main
+#   /concept-e/ Concept E preview, always taken from concept-e-guided-workflow (separate subdirectory)
+# This workflow runs from main. Pushes to concept-e-guided-workflow re-run it via workflow_dispatch
+# (see that branch's trigger-pages.yml), so branch code can never be deployed over the production root.
 on:
   push:
     branches: [main]
@@ -22,7 +27,10 @@ jobs:
       contents: read
       pages: read
     steps:
-      - uses: actions/checkout@v7
+      - name: Check out production (main)
+        uses: actions/checkout@v7
+        with:
+          ref: main
       - uses: actions/setup-node@v7
         with:
           node-version: '24'
@@ -31,6 +39,19 @@ jobs:
       - run: npm ci
       - run: npm test
       - run: npm run build
+      - name: Add Concept E preview under /concept-e/
+        env:
+          PREVIEW_BRANCH: concept-e-guided-workflow
+        run: |
+          echo "production commit: $(git rev-parse HEAD)"
+          if git fetch --depth=1 origin "$PREVIEW_BRANCH"; then
+            echo "concept-e commit:  $(git rev-parse FETCH_HEAD)"
+            mkdir -p ../_preview-src
+            git archive FETCH_HEAD cog-refinements | tar -x -C ../_preview-src
+            bash .github/scripts/assemble-pages.sh ../_preview-src dist
+          else
+            echo "::warning::branch $PREVIEW_BRANCH not found - deploying production only"
+          fi
       - uses: actions/configure-pages@v6
       - uses: actions/upload-pages-artifact@v5
         with:

@@ -1,0 +1,24 @@
+name: Rebuild combined Pages site
+
+# Concept E preview branch only. It does NOT deploy anything itself: it asks the Pages workflow on `main`
+# to rebuild the combined artifact (production root from main + this branch under /concept-e/).
+on:
+  push:
+    branches: [concept-e-guided-workflow]
+    paths:
+      - 'cog-refinements/**'
+      - 'README.md'
+      - '.github/workflows/trigger-pages.yml'
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Run main's Pages workflow (on main)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run deploy-pages.yml --ref main --repo "$GITHUB_REPOSITORY"

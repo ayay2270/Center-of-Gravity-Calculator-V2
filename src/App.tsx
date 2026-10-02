@@ -6,22 +6,27 @@ import type {NumericKey} from './Controls';
 import {Drawing} from './Drawing';
 import {Process} from './Process';
 import {AngleResults} from './AngleResults';
+import {compareSpecification} from './specComparison';
 const plain=(n:number)=>Number.isInteger(n)?String(n):n.toFixed(1);
 export function App(){
-  const [parameters,setParameters]=useState<Parameters>({...DEFAULTS});
+  const [parameters,setParameters]=useState<Parameters>(()=>{
+    const tilt=Number(document.getElementById('root')?.dataset.reviewTilt??DEFAULTS.tilt);
+    return {...DEFAULTS,tilt:Number.isFinite(tilt)?Math.min(LIMITS.tilt[1],Math.max(LIMITS.tilt[0],tilt)):DEFAULTS.tilt};
+  });
   const [settings,setSettings]=useState(false);
   const [expanded,setExpanded]=useState(()=>{try{return sessionStorage.getItem('cg-a-process')==='expanded';}catch{return false;}});
   const help=useRef<HTMLDialogElement>(null);
   const r=calculate(parameters),p=parameters;
+  const spec=compareSpecification(p);
   useEffect(()=>{try{sessionStorage.setItem('cg-a-process',expanded?'expanded':'collapsed');}catch{}},[expanded]);
   const change=(field:NumericKey,value:number)=>setParameters(previous=>({...previous,[field]:Math.min(LIMITS[field][1],Math.max(LIMITS[field][0],field==='specLimitAngle'?Math.round(value*10)/10:value))}));
   const moveCG=(x:number,z:number)=>{setSettings(true);setParameters(previous=>({...previous,mode:'manual',cgOffset:x,cgHeight:z}));};
   const switchMode=(mode:'theoretical'|'manual')=>setParameters(previous=>{const current=calculate(previous);return {...previous,mode,cgHeight:current.z,cgOffset:current.x};});
   const reset=()=>{setParameters({...DEFAULTS});setSettings(false);};
   const limit=formatAngleLabel(p.specLimitAngle);
-  const message=p.mode==='theoretical'?`理論置中評估${r.meetsRequirement?'未超過':'超過'} ${limit}° 上限，需確認實際重心；規格判讀與目前翻覆臨界條件分開評估。`:'依手動重心評估右側靜態翻覆；重心高度由地面起算，請確認實測重心與支承條件。';
+  const message=`目前傾角${spec.passes?'未超過':'超過'} ${limit}° 規格上限；翻覆臨界獨立判讀。所需棧板寬度仍依臨界角對應上限反算。`;
   return <div className="application" data-process-expanded={expanded}>
-    <header className="top-header"><Icon kind="cabinet" className="brand-icon"/><div className="title-group"><h1>2D 重心 / 翻覆穩定性計算機</h1><p>清楚並列輸入、圖面與判讀 · 右側靜態翻覆</p></div><span className="version-tag">Version A</span><div className="header-actions"><span className="local-label">本機工程原型</span><button onClick={reset}>範例重設</button><button className="help-button" aria-label="計算模型說明" onClick={()=>help.current?.showModal()}>?</button></div></header>
+    <header className="top-header"><Icon kind="cabinet" className="brand-icon"/><div className="title-group"><h1>2D 重心 / 翻覆穩定性計算機</h1><p>清楚並列輸入、圖面與判讀 · 右側靜態翻覆</p></div><div className="header-actions"><button onClick={reset}>範例重設</button><button className="help-button" aria-label="計算模型說明" onClick={()=>help.current?.showModal()}>?</button></div></header>
     <main className="workspace">
       <aside className="input-panel panel"><div className="panel-heading"><Icon kind="palletHeight"/><h2>輸入參數</h2><span>mm / °</span></div><div className="input-body">
         <h3 className="input-group-title"><Icon kind="palletHeight"/>棧板與機櫃尺寸</h3>
@@ -41,7 +46,7 @@ export function App(){
       </div></aside>
     </main>
     <Process parameters={p} result={r} expanded={expanded} onToggle={()=>setExpanded(!expanded)}/>
-    <footer className="page-footer"><span>Version A · 工程工作台</span><span>理論置中為早期設計篩選 · 2D 靜態模型</span><span>本機原型 / 即時驗算</span></footer>
-    <dialog ref={help} className="help-dialog" onClick={event=>{if(event.target===event.currentTarget)help.current?.close();}}><h2>計算模型說明</h2><p>機櫃與棧板繞棧板右下角旋轉。重力線保持世界座標鉛直，當其通過支點時達到靜態翻覆臨界條件。</p><p>重心高度 Zcg 以直立時的地面起算；手動模式不再加棧板高度。偏移正值向右、負值向左。</p><p>規格上限可調整，目前為 {p.specLimitAngle.toFixed(1)}°：臨界角不超過上限為符合，超過為不符合。上限餘量 = 規格上限 − 臨界角，正數為尚有餘量，負數為已超過。此規格判讀與目前傾斜狀態分開；目前傾角超過臨界角表示靜態模型失穩，不是動態翻倒模擬。</p><p>機櫃側視寬度依棧板寬度示意；本模型不包含滑動、彈性變形與動態衝擊。</p><p>所需寬度顯示 {limit}° 對應的反算值。半寬先向上取整至 10 mm，再乘以 2 得工程取整值；取整值本身不表示通過上限檢核。手動偏移時 W = Zcg × tan({limit}°) + Xcg。</p><button onClick={()=>help.current?.close()}>知道了</button></dialog>
+    <footer className="page-footer"><span>理論置中為早期設計篩選 · 2D 靜態模型</span><span>2D 靜態翻覆模型</span></footer>
+    <dialog ref={help} className="help-dialog" onClick={event=>{if(event.target===event.currentTarget)help.current?.close();}}><h2>計算模型說明</h2><p>機櫃與棧板繞棧板右下角旋轉。重力線保持世界座標鉛直，當其通過支點時達到靜態翻覆臨界條件。</p><p>重心高度 Zcg 以直立時的地面起算；手動模式不再加棧板高度。偏移正值向右、負值向左。</p><p>規格上限可調整，目前為 {p.specLimitAngle.toFixed(1)}°：目前傾角不超過上限為符合，超過為不符合。餘量 = 規格上限 − {spec.subject}，正數為尚有餘量，負數為已超過。此規格判讀與目前傾斜狀態分開；目前傾角超過臨界角表示靜態模型失穩，不是動態翻倒模擬。</p><p>機櫃側視寬度依棧板寬度示意；本模型不包含滑動、彈性變形與動態衝擊。</p><p>所需寬度顯示 {limit}° 對應的反算值。半寬先向上取整至 10 mm，再乘以 2 得工程取整值；取整值本身不表示通過上限檢核。手動偏移時 W = Zcg × tan({limit}°) + Xcg。</p><button onClick={()=>help.current?.close()}>知道了</button></dialog>
   </div>;
 }

@@ -20,16 +20,16 @@ export async function runBrowserQA(tab) {
   check(initialLayout.inputBottom<900&&initialLayout.resultBottom<900&&initialLayout.processBottom<900,'Inputs, CG settings, results and process header are visible');
   check((await text('cg-height-result')).includes('1377'),'Reference CG = 1377 mm');
   check((await text('critical-angle')).includes('21.6'),'Reference critical angle = 21.6°');
-  check((await text('spec-gap')).includes('0.4'),'Reference specification gap = 0.4°');
+  check((await text('spec-gap')).includes('6.0'),'Reference current-tilt upper-limit gap = 6.0°');
   check((await text('recommended-width')).includes('1120'),'Summary retains engineering rounded width');
   check((await text('design-status')).includes('符合')&&(await text('current-status'))==='未達臨界角','Reference design passes the 22° upper limit and current state is stable');
   const summary=await tab.playwright.evaluate(()=>{
     const relationship=document.querySelector('[data-testid="angle-relationship"]'),width=document.querySelector('[data-testid="angle-width"]'),cards=[...document.querySelectorAll('.judgment-card')];
     return {angles:[...relationship.querySelectorAll('.angle-summary strong')].map(e=>e.textContent),scaleCount:relationship.querySelectorAll('[data-testid="angle-scale"],.angle-scale-container').length,width:width.textContent.replace(/\s/g,''),widthDetails:width.querySelectorAll('p').length,cardBoxes:cards.map(e=>{const r=e.getBoundingClientRect();return {top:r.top,width:r.width};})};
   });
-  check(summary.angles.join('|')==='16.0°|21.6°|22.0°'&&summary.scaleCount===0,'Three-angle summary is retained and the removed scale is absent');
+  check(summary.angles.join('|')==='16.0°|21.6°|22.0°'&&summary.scaleCount===0,'Three-angle summary is retained without a chart');
   check(summary.width==='所需棧板寬度1120mm'&&summary.widthDetails===0,'Width summary contains only title and recommended value');
-  check(summary.cardBoxes.length===2&&summary.cardBoxes[0].top===summary.cardBoxes[1].top&&Math.abs(summary.cardBoxes[0].width-summary.cardBoxes[1].width)<1,'Two equally weighted judgment cards sit side by side');
+  check(summary.cardBoxes.length===2&&summary.cardBoxes[0].top<summary.cardBoxes[1].top&&Math.abs(summary.cardBoxes[0].width-summary.cardBoxes[1].width)<1,'Two equally weighted judgment cards use full-width rows');
   for(const [name,number] of [['棧板高度',180],['棧板寬度',1200],['機櫃高度',2600],['目前傾角',18.5]]){
     await tab.playwright.getByRole('spinbutton',{name:name+'數值',exact:true}).fill(String(number));
     check(Math.abs(await range(name+'滑桿')-number)<1e-6,name+' numeric input synchronizes range');
@@ -64,7 +64,7 @@ export async function runBrowserQA(tab) {
   check(manualZ>1377&&manualX>0,'CG drag changes height and horizontal offset');
   check(manualZ===await range('重心高度（離地）滑桿')&&manualX===await range('重心左右偏移滑桿'),'CG drag synchronizes both sliders and numeric fields');
   check((await text('critical-angle'))===(Math.atan((546-manualX)/manualZ)*180/Math.PI).toFixed(1)+'°','CG dragging updates the retained critical angle summary correctly');
-  check((await text('critical-angle'))!=='21.6°'&&(await text('spec-gap'))!=='距規格上限尚有 0.4°','CG drag recalculates angle and margin');
+  check((await text('critical-angle'))!=='21.6°'&&(await text('spec-gap'))==='距規格上限尚有 6.0°','CG drag recalculates critical angle while the tilt-versus-limit gap stays unchanged');
   const beforeControls=await geometry();
   await tab.playwright.getByRole('spinbutton',{name:'重心左右偏移數值',exact:true}).fill('-100');
   await tab.playwright.getByRole('spinbutton',{name:'重心高度（離地）數值',exact:true}).fill('1377');

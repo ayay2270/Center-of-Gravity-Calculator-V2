@@ -1,0 +1,55 @@
+// Regression for the user's accepted B rule and numeric-only angle summary.
+export async function runSpecComparisonQA(tab,capture=async()=>{}) {
+  const records=[];
+  const check=(condition,label)=>{if(!condition)throw new Error(label);records.push({label,passed:true});};
+  const set=async(name,value)=>{await tab.playwright.getByRole('spinbutton',{name:name+'數值',exact:true}).fill(String(value));await tab.playwright.getByTestId('critical-angle').click();};
+  const process=tab.playwright.getByRole('button',{name:/計算過程/});
+  const state=()=>tab.playwright.evaluate(()=>{
+    const text=id=>document.querySelector(`[data-testid="${id}"]`).textContent;
+    const input=document.querySelector('.input-body').getBoundingClientRect(),cg=document.querySelector('.cg-model-card').getBoundingClientRect();
+    return {spec:text('design-status'),gap:text('spec-gap'),comparison:text('spec-comparison'),physical:text('current-status'),physicalGap:text('current-gap'),width:text('recommended-width'),critical:text('critical-angle'),cg:text('cg-height-result'),geometry:document.querySelector('[data-testid="assembly"] polygon').getAttribute('points'),conclusion:document.querySelector('.calculation-card:last-child').textContent,summary:document.querySelector('.process-summary').textContent,cgVisible:cg.bottom<=input.bottom+1,retiredSwitch:document.querySelector('.spec-comparison-switch')!==null};
+  });
+  await tab.playwright.getByRole('button',{name:'範例重設',exact:true}).click();
+  if(await process.getAttribute('aria-expanded')==='true')await process.click();
+  let s=await state();
+  check(s.spec==='目前傾角符合規格'&&s.gap==='距規格上限尚有 6.0°'&&s.comparison==='16.0° < 22.0°','Accepted B rule is the default');
+  check(!s.retiredSwitch,'The retired A/B specification selector is removed');
+  check(s.width.includes('1120')&&s.cg.includes('1377')&&s.critical==='21.6°','Geometry and width reference values are unchanged');
+  await set('目前傾角',29.9);s=await state();
+  check(s.spec==='目前傾角超過規格'&&s.gap==='超過規格上限 7.9°'&&s.comparison==='29.9° > 22.0°','29.9° is specification FAIL by 7.9°');
+  check(s.physical==='已超過臨界角'&&s.physicalGap==='超過臨界角 8.3°','Tipping state remains separately based on critical angle');
+  check(s.summary.includes('目前傾角 29.9°')&&s.summary.includes('-7.9°'),'Collapsed calculation summary uses current-tilt margin');
+  await process.click();s=await state();
+  check(s.conclusion.includes('22.0° − 29.9°')&&s.conclusion.includes('-7.9°'),'Expanded conclusion matches the accepted rule');
+  check(s.cgVisible,'CG remains visible with process expanded');
+  check(await tab.playwright.getByTestId('angle-summary').locator('strong').count()===3,'Three live angle values remain visible');
+  check(await tab.playwright.locator('.angle-relationship svg,.angle-view-switch,.angle-separated-tracks,.angle-order,.angle-rulers').count()===0,'Angle graphics and style selector are removed');
+  await process.click();await set('目前傾角',22);s=await state();
+  check(s.spec==='目前傾角符合規格'&&s.gap==='剛好位於規格上限','Equality at 22° remains PASS');
+  await set('規格上限角度',21.9);s=await state();
+  check(s.gap==='超過規格上限 0.1°','Edited upper limit updates excess immediately');
+  await tab.playwright.getByRole('button',{name:'範例重設',exact:true}).click();
+  await set('棧板寬度',2*1377*Math.tan(22.4*Math.PI/180));s=await state();
+  check(s.critical==='22.4°'&&s.spec==='目前傾角符合規格'&&s.comparison==='16.0° < 22.0°','Critical angle no longer controls specification PASS/FAIL');
+  await tab.playwright.getByRole('button',{name:'範例重設',exact:true}).click();
+  await tab.playwright.getByRole('button',{name:/重心設定/}).click();await tab.playwright.getByRole('button',{name:'手動調整',exact:true}).click();
+  await set('重心高度（離地）',1262);await set('重心左右偏移',318);await set('目前傾角',19.4);s=await state();
+  check(s.spec==='目前傾角符合規格'&&s.physical==='已超過臨界角'&&s.critical==='10.2°'&&s.width.includes('1660'),'Manual CG preserves independent physical and specification judgments');
+  await process.click();check((await state()).cgVisible,'Manual CG remains unclipped with process expanded');
+  await process.click();await tab.playwright.getByRole('button',{name:'範例重設',exact:true}).click();
+  await tab.playwright.getByRole('slider',{name:'目前傾角滑桿',exact:true}).press('ArrowRight');s=await state();
+  check(s.comparison==='16.1° < 22.0°'&&s.gap==='距規格上限尚有 5.9°','Tilt slider updates specification results');
+  await tab.playwright.getByRole('button',{name:'至規格上限',exact:true}).click();s=await state();
+  check(s.comparison==='22.0° = 22.0°','Upper-limit shortcut gives equality');
+  await tab.playwright.getByRole('button',{name:'至臨界角',exact:true}).click();s=await state();
+  check(s.physical==='已達臨界角'&&s.comparison==='21.6° < 22.0°','Critical shortcut retains exact physical boundary');
+  await tab.playwright.getByRole('button',{name:'直立 0°',exact:true}).click();s=await state();check(s.comparison==='0.0° < 22.0°','Upright shortcut updates specification');
+  await tab.playwright.getByRole('button',{name:'範例重設',exact:true}).click();
+  const point=await tab.playwright.evaluate(()=>{const r=document.querySelector('[data-testid="cg-point"]').getBoundingClientRect();return{x:r.x+r.width/2,y:r.y+r.height/2};});
+  await tab.cua.drag({path:[point,{x:point.x+10,y:point.y-10},{x:point.x+25,y:point.y-25}]});s=await state();
+  check(s.cg!=='1377 mm'&&await tab.playwright.getByRole('button',{name:'手動調整',exact:true}).getAttribute('aria-pressed')==='true','CG drag still activates manual adjustment');
+  check(s.spec==='目前傾角符合規格'&&s.comparison==='16.0° < 22.0°','CG drag does not alter the independent current-tilt comparison');
+  await tab.playwright.getByRole('button',{name:'範例重設',exact:true}).click();
+  check((await tab.dev.logs({levels:['error'],limit:10})).length===0,'No errors in accepted B behavior');
+  return {checks:records.length,records};
+}

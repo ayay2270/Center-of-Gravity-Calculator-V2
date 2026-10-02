@@ -1,9 +1,15 @@
 /* An expanded walkthrough may extend the page; the primary panels stay readable. */
+@media (min-width:951px) {
+  .application[data-process-expanded="true"] {
+    height:auto;
+    grid-template-rows:74px minmax(max(560px,calc(100dvh - 172px)),max-content) auto 25px;
+  }
+}
 @media (min-width:1281px) {
   .application { grid-template-rows:74px minmax(570px,1fr) auto 25px; }
   .application[data-process-expanded="true"] {
     height:auto;
-    grid-template-rows:74px 570px auto 25px;
+    grid-template-rows:74px minmax(max(570px,calc(100dvh - 172px)),max-content) auto 25px;
   }
   .input-body { padding-top:12px; padding-bottom:12px; }
   .control { padding-bottom:10px; }

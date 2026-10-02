@@ -1,116 +1,53 @@
-# Center of Gravity Calculator V2
+# Center of Gravity Calculator V2 — Concept E
+## Guided Workflow Design Exploration
 
-桌面導向的 2D 重心 / 翻覆穩定性工程計算工具，用於快速評估機櫃與棧板系統向右側的靜態翻覆穩定性。
+> **This is the `concept-e-guided-workflow` branch. It is a design exploration, not the production site.**
 
-## Online Demo
+| | URL | Source branch |
+|---|---|---|
+| **Production** | https://ayay2270.github.io/Center-of-Gravity-Calculator-V2/ | `main` |
+| **Concept E Preview** | https://ayay2270.github.io/Center-of-Gravity-Calculator-V2/concept-e/ | `concept-e-guided-workflow` |
 
-[開啟線上計算機](https://ayay2270.github.io/Center-of-Gravity-Calculator-V2/)
+Both versions are live at the same time so they can be tested side by side. This version is being **evaluated before deciding whether to replace `main`**. Nothing on this branch has been merged into `main`.
 
-## 主要功能
+## Purpose of Concept E
 
-- 2D SVG 側視工程圖：重心、重力線、支點與傾角即時更新；尺寸標註預設隱藏，展開計算過程時顯示。
-- 棧板高度、棧板寬度、機櫃高度及目前傾角 θ 支援同步滑桿與數值輸入。
-- 理論置中 / 手動重心模式；直接拖曳紅色 CG 點即可切換手動模式，雙向同步重心高度與左右偏移。
-- CG 點可用方向鍵微調 1 mm，Shift + 方向鍵微調 10 mm。
-- 世界座標鉛直重力線與固定的右下翻覆支點。
-- 規格上限角度可精確編輯，預設 22.0°，範圍 1.0°–60.0°、步進 0.1°。
-- 直立 0°、至規格上限、臨界角快速操作。
-- 目前傾角、臨界角及規格上限以三個數字並列；目前姿態與規格檢核獨立判讀，另提供所需棧板寬度反算。
-- 計算過程包含工程尺寸明細與六步水平公式卡片，可展開 / 收合，於目前工作階段保留收合狀態。
+Concept E turns the order of engineering reasoning — **geometry → tilt / spec → CG → result** — into the order of the page. It is still one calculator, not a wizard: every step is visible at once.
 
-主要工作區以 1440 × 900 桌面視窗為目標，窄視窗可捲動操作。
+## Differences from production
 
-## 工程計算
+- **Inputs as numbered steps 1 → 2 → 3** on a thin spine (棧板與機櫃尺寸 / 角度設定 / 重心 CG). All steps are open by default; each can collapse to a one-line value summary.
+- **Results read as a chain (4.1 → 4.4):** 臨界角 θc → compared with the current tilt θ → compared with the spec limit → required pallet width. Each item notes which step it draws on. Card 4.1 shows only the large critical-angle value (21.6° by default).
+- **Step-to-drawing highlighting:** hovering or focusing a step emphasises what it controls in the 2D drawing (dimensions / tilt arc / CG) and softens the rest.
+- **1-2-3-4 index** in the drawing header; every calculation card is tagged with the step its inputs come from.
+- Tilt slider markers for θc (orange) and the spec limit (red); quick targets carry the same colours.
+- Small secondary text lifted to AA contrast; status marks and chevrons drawn as SVG icons.
 
-理論置中重心高度：
+Visual language (navy chrome, white panels, blue/orange/red angle numerals, pass/fail cards, engineering drawing) follows production.
 
-`Zcg = 機櫃高度 / 2 + 棧板高度`
+## Engineering logic is unchanged
 
-右側翻覆時，重心至支點的水平距離：
+The engineering formulas, calculation logic, PASS / FAIL / boundary rules, CG behaviour (drag, arrow keys, manual / theoretical modes), defaults and input ranges are the same as production. The shared engine was checked against the production calculation function over 20,000 random inputs (both CG modes) with no differences. All production inputs and outputs, the six-step calculation panel, the engineering dimensions, help and reset are present.
 
-`D = 棧板寬度 / 2 − Xcg`
+## Concept E file locations
 
-臨界角：
-
-`θc = tan⁻¹(D / Zcg)`
-
-使用目前規格上限角度反算所需距離：
-
-`Drequired = Zcg × tan(specLimitAngle)`
-
-置中重心的精確所需棧板寬度：
-
-`所需棧板寬度 = 2 × Zcg × tan(specLimitAngle)`
-
-手動偏移時，所需半寬 `W = Drequired + Xcg`，精確全寬為 `2W`。此反算值對應臨界角恰為所選規格上限；半寬向上取整至 10 mm，再乘以 2。預設上限 22.0° 時，精確全寬約 1112.7 mm、工程取整值為 1120 mm。取整值本身不表示通過規格上限檢核。
-
-- Zcg 由地面起算，手動重心高度不再加上棧板高度。
-- Xcg 正值表示向右、靠近右側支點；負值表示向左、遠離右側支點。
-- 本工具進行靜態翻覆篩選，並非動態翻倒模擬；不包含滑動、變形或衝擊分析。圖中機櫃寬度按棧板寬度示意。
-- 規格是否超過所選上限，與目前姿態是否達到物理翻覆臨界條件分開評估；需確認實際重心與支承條件。
-
-## 驗證案例
-
-| 項目 | 預設值 / 結果 |
-| --- | --- |
-| 棧板高度 | 153 mm |
-| 棧板寬度 | 1092 mm |
-| 機櫃高度 | 2448 mm |
-| 重心模式 / Xcg | 理論置中 / 0 mm |
-| 理論重心高度 Zcg | 1377 mm |
-| 現有半寬 | 546 mm |
-| 臨界角 θc | 約 21.6° |
-| 規格上限 | 22.0° |
-| 22° 上限餘量 | 約 +0.4° |
-| 精確所需棧板寬度 | 約 1112.7 mm |
-| 22° 工程建議棧板寬度 | 1120 mm |
-| 目前傾角 / 目前狀態 | 16.0° / 仍穩定 |
-
-## 規格上限與目前狀態
-
-兩項檢核分開判讀：
-
-1. **規格檢核**：θc ≤ 規格上限為通過，低於上限顯示綠色「符合規格」，相等同樣顯示綠色「符合規格」；θc > 規格上限顯示紅色「超過規格」。餘量 = 規格上限 − θc，正數表示尚有餘量，負數表示已超過上限。
-2. **目前狀態**：θ < θc 為綠色「未達臨界角」（仍穩定）；相等時為琥珀色「已達臨界角」；超過時為「已超過臨界角」。臨界比較使用小量容差處理浮點誤差。
-
-例如上限 22.0°、θc = 21.6°、目前 θ = 16.0°，餘量為 +0.4°，表示距離上限尚有 0.4°、符合規格，且目前姿態仍穩定。θc = 22.0° 時餘量為 0.0°，屬邊界 / 通過；θc = 22.4° 時餘量為 −0.4°，超過上限、不通過。
-
-手動案例 Zcg = 1262 mm、Xcg = +318 mm，臨界角約 10.2°：上限 22.0° 時餘量 +11.8°、符合規格，但目前 θ = 19.4° 已超過臨界角。更改上限只更新規格檢核、餘量與寬度反算，不改變目前姿態或臨界角。
-
-## 技術
-
-- Vite
-- React
-- TypeScript
-- SVG
-
-## 本機開發
-
-建議使用 Node.js 24。
-
-```bash
-npm ci
-npm run dev
+```
+cog-refinements/concept-e/index.html     the Concept E page
+cog-refinements/shared/cog-base.css      design system (production look)
+cog-refinements/shared/cog-core.js       calculation engine, state, input binding, CG drag, drawing geometry
+cog-refinements/shared/cog-ui.js         icons, input controls, calculation cards, engineering drawing
+.github/workflows/trigger-pages.yml      re-runs main's Pages workflow when this branch changes
 ```
 
-開發網址：<http://127.0.0.1:4527/>。
+Open `cog-refinements/concept-e/index.html` directly in Chrome / Edge, or use the preview URL above.
 
-測試、建置及預覽：
+## How the preview is deployed
 
-```bash
-npm test
-npm run build
-npm run preview
-```
+GitHub Pages publishes **one combined artifact**, built by the workflow on `main`:
 
-`npm test` 包含 21 項工程測試，涵蓋理論預設值、手動正負偏移、低於 / 等於 / 超過臨界角、可調規格上限與邊界、寬度反算、支點座標轉換、數值顯示及無效輸入。`npm run build` 包含 TypeScript 檢查。
+- `/` — production, always built from `main`
+- `/concept-e/` — this branch's `cog-refinements/` files, copied into a separate subdirectory (`/concept-e/shared/` holds the three shared files; only the asset path prefix is rewritten)
 
-`tests/browser-qa.mjs` 提供 `runBrowserQA(tab)`，可搭配 Browser 工具的 tab API 驗證滑桿、數值輸入、CG 拖曳、模式切換、傾角、重力線、固定支點及計算面板收合。
+A push to this branch dispatches the `main` workflow, so branch code can never be deployed over the production root.
 
-`tests/revision-qa.mjs` 驗證多個傾角的箭頭與尺寸標註；`tests/spec-limit-qa.mjs` 驗證上限編輯、動態文字、狀態顏色、寬度與公式連動、快捷按鈕及草圖手動案例。
-
-## 部署
-
-更新 `main` 後，GitHub Actions 會自動執行依賴安裝、工程測試及建置，再部署至 GitHub Pages；也可手動觸發 workflow。
-
-部署設定位於 `.github/workflows/deploy-pages.yml`，Pages 來源為 **GitHub Actions**。本機開發、建置與預覽使用 `/`，Actions 建置使用 `/Center-of-Gravity-Calculator-V2/`。
+> The rest of this repository (`src/`, `tests/`, build config) is the production source as of the branch point and is not part of Concept E.
